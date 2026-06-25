@@ -436,15 +436,7 @@ function draw() {
 
 // ─── INTERACTIVITY ────────────────────────────────────────────────────────────
 
-// ─── NAVI VOICE (ElevenLabs) ─────────────────────────────────────────────────
-
-const ELEVENLABS_API_KEY  = (typeof CONFIG_KEYS !== 'undefined')
-  ? CONFIG_KEYS.elevenLabsApiKey
-  : '';
-const ELEVENLABS_VOICE_ID = 'J3FN0lzxPkOfnE6mF5eT'; // "Whimsical Forest Sprite"
-
-let naviAudio    = null;   // cached Audio element
-let isSpeaking   = false;
+// ─── NAVI VOICE ──────────────────────────────────────────────────────────────
 
 // Navi's random phrases — add or remove any you like!
 const NAVI_PHRASES = [
@@ -458,7 +450,8 @@ const NAVI_PHRASES = [
   'Look at that!',
 ];
 
-let lastPhraseIndex = -1; // track last used so we never repeat twice in a row
+let lastPhraseIndex = -1;
+let isSpeaking      = false;
 
 function pickNaviPhrase() {
   let idx;
@@ -468,87 +461,40 @@ function pickNaviPhrase() {
   return NAVI_PHRASES[idx];
 }
 
-async function naviSpeak() {
-  if (isSpeaking) return;
+function naviSpeak() {
+  if (!window.speechSynthesis || isSpeaking) return;
 
-  const phrase = pickNaviPhrase();
-  naviCurrentPhrase = phrase; // update bubble text before audio starts
+  const phrase      = pickNaviPhrase();
+  naviCurrentPhrase = phrase;
 
-  // If no API key set, fall back to Web Speech silently
-  if (!ELEVENLABS_API_KEY || ELEVENLABS_API_KEY === 'YOUR_API_KEY_HERE') {
-    naviSpeakFallback(phrase);
-    return;
-  }
-
-  isSpeaking = true;
-
-  try {
-    const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
-      {
-        method: 'POST',
-        headers: {
-          'xi-api-key':   ELEVENLABS_API_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: phrase,
-          model_id: 'eleven_turbo_v2',
-          voice_settings: {
-            stability:        0.35,
-            similarity_boost: 0.80,
-            style:            0.60,
-            use_speaker_boost: true,
-          },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      console.warn('ElevenLabs error:', response.status);
-      isSpeaking = false;
-      naviSpeakFallback(phrase);
-      return;
-    }
-
-    const blob = await response.blob();
-    const url  = URL.createObjectURL(blob);
-
-    if (naviAudio) {
-      naviAudio.pause();
-      URL.revokeObjectURL(naviAudio.src);
-    }
-    naviAudio         = new Audio(url);
-    naviAudio.onended = () => { isSpeaking = false; };
-    naviAudio.onerror = () => { isSpeaking = false; };
-    naviAudio.play();
-
-  } catch (err) {
-    console.warn('naviSpeak error:', err);
-    isSpeaking = false;
-    naviSpeakFallback(phrase);
-  }
-}
-
-// Fallback: Web Speech API if no ElevenLabs key is set
-function naviSpeakFallback(phrase) {
-  if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
+
   const utter  = new SpeechSynthesisUtterance(phrase);
   utter.pitch  = 2;
   utter.rate   = 0.9;
   utter.volume = 1;
+
   const voices = window.speechSynthesis.getVoices();
-  const female = voices.find(v => /samantha|karen|zira|female/i.test(v.name));
+  const female = voices.find(v => /samantha|karen|moira|tessa|zira|female/i.test(v.name));
   if (female) utter.voice = female;
+
+  isSpeaking    = true;
+  utter.onend   = () => { isSpeaking = false; };
+  utter.onerror = () => { isSpeaking = false; };
+
   setTimeout(() => window.speechSynthesis.speak(utter), 80);
+}
+
+// Prime voice list early (some browsers load it async)
+if (window.speechSynthesis) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 }
 
 // ─── INTERACTIVITY ────────────────────────────────────────────────────────────
 
 // Click — dust burst + speech bubble + Navi's voice
 function mousePressed() {
-  // Dust burst
   for (let i = 0; i < 28; i++) {
     if (system.particles.length >= CONFIG.maxParticles) system.particles.shift();
     const ox = random(-14, 14);
@@ -557,10 +503,8 @@ function mousePressed() {
       new DustParticle(fairy.pos.x + ox, fairy.pos.y + oy, 0, 0)
     );
   }
-  // Speech bubble
   bubbleState   = 'SHOWING';
   bubbleStateAt = millis();
-  // Voice
   naviSpeak();
 }
 
