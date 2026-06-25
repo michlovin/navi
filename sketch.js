@@ -9,8 +9,6 @@
  *  1. Fairy  — spring-chases mouse, bobs on a sine wave, pulses in size
  *  2. Trail  — dust particles shed continuously, steered by Perlin noise
  *  3. Orbiters — small motes circling the fairy body
- *
- * Paste into editor.p5js.org — no extra libraries needed.
  */
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
