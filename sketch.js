@@ -11,6 +11,7 @@ function getScale() {
   return constrain(min(windowWidth, windowHeight) / 700, 0.45, 1.4);
 }
 
+
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 // All pixel values are BASE values multiplied by scale() at runtime.
 
