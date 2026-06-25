@@ -9,6 +9,8 @@
  *  1. Fairy  — spring-chases mouse, bobs on a sine wave, pulses in size
  *  2. Trail  — dust particles shed continuously, steered by Perlin noise
  *  3. Orbiters — small motes circling the fairy body
+ *
+ * Paste into editor.p5js.org — no extra libraries needed.
  */
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
@@ -380,6 +382,7 @@ const BUBBLE_FADE_MS  = 500;    // fade in / fade out duration
 let   bubbleState     = 'HIDDEN'; // 'HIDDEN' | 'SHOWING'
 let   bubbleStateAt   = 0;      // millis() when SHOWING began
 let   bubbleAlpha     = 0;      // current rendered opacity 0-255
+let   naviCurrentPhrase = 'Hey, listen!'; // updated each click
 
 // ─── P5 LIFECYCLE ─────────────────────────────────────────────────────────────
 
@@ -433,7 +436,117 @@ function draw() {
 
 // ─── INTERACTIVITY ────────────────────────────────────────────────────────────
 
-// Click — burst of dust + show "Hey, listen!" bubble
+// ─── NAVI VOICE (ElevenLabs) ─────────────────────────────────────────────────
+
+const ELEVENLABS_API_KEY  = (typeof CONFIG_KEYS !== 'undefined')
+  ? CONFIG_KEYS.elevenLabsApiKey
+  : '';
+const ELEVENLABS_VOICE_ID = 'J3FN0lzxPkOfnE6mF5eT'; // "Whimsical Forest Sprite"
+
+let naviAudio    = null;   // cached Audio element
+let isSpeaking   = false;
+
+// Navi's random phrases — add or remove any you like!
+const NAVI_PHRASES = [
+  'Hey, listen!',
+  'Hello!',
+  'Watch out!',
+  'Did you bring me snacks?',
+  'Fooey!',
+  'Over here!',
+  'Be careful!',
+  'Look at that!',
+];
+
+let lastPhraseIndex = -1; // track last used so we never repeat twice in a row
+
+function pickNaviPhrase() {
+  let idx;
+  do { idx = floor(random(NAVI_PHRASES.length)); }
+  while (idx === lastPhraseIndex && NAVI_PHRASES.length > 1);
+  lastPhraseIndex = idx;
+  return NAVI_PHRASES[idx];
+}
+
+async function naviSpeak() {
+  if (isSpeaking) return;
+
+  const phrase = pickNaviPhrase();
+  naviCurrentPhrase = phrase; // update bubble text before audio starts
+
+  // If no API key set, fall back to Web Speech silently
+  if (!ELEVENLABS_API_KEY || ELEVENLABS_API_KEY === 'YOUR_API_KEY_HERE') {
+    naviSpeakFallback(phrase);
+    return;
+  }
+
+  isSpeaking = true;
+
+  try {
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
+      {
+        method: 'POST',
+        headers: {
+          'xi-api-key':   ELEVENLABS_API_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: phrase,
+          model_id: 'eleven_turbo_v2',
+          voice_settings: {
+            stability:        0.35,
+            similarity_boost: 0.80,
+            style:            0.60,
+            use_speaker_boost: true,
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      console.warn('ElevenLabs error:', response.status);
+      isSpeaking = false;
+      naviSpeakFallback(phrase);
+      return;
+    }
+
+    const blob = await response.blob();
+    const url  = URL.createObjectURL(blob);
+
+    if (naviAudio) {
+      naviAudio.pause();
+      URL.revokeObjectURL(naviAudio.src);
+    }
+    naviAudio         = new Audio(url);
+    naviAudio.onended = () => { isSpeaking = false; };
+    naviAudio.onerror = () => { isSpeaking = false; };
+    naviAudio.play();
+
+  } catch (err) {
+    console.warn('naviSpeak error:', err);
+    isSpeaking = false;
+    naviSpeakFallback(phrase);
+  }
+}
+
+// Fallback: Web Speech API if no ElevenLabs key is set
+function naviSpeakFallback(phrase) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utter  = new SpeechSynthesisUtterance(phrase);
+  utter.pitch  = 2;
+  utter.rate   = 0.9;
+  utter.volume = 1;
+  const voices = window.speechSynthesis.getVoices();
+  const female = voices.find(v => /samantha|karen|zira|female/i.test(v.name));
+  if (female) utter.voice = female;
+  setTimeout(() => window.speechSynthesis.speak(utter), 80);
+}
+
+// ─── INTERACTIVITY ────────────────────────────────────────────────────────────
+
+// Click — dust burst + speech bubble + Navi's voice
 function mousePressed() {
   // Dust burst
   for (let i = 0; i < 28; i++) {
@@ -444,9 +557,11 @@ function mousePressed() {
       new DustParticle(fairy.pos.x + ox, fairy.pos.y + oy, 0, 0)
     );
   }
-  // Trigger (or restart) the speech bubble
+  // Speech bubble
   bubbleState   = 'SHOWING';
   bubbleStateAt = millis();
+  // Voice
+  naviSpeak();
 }
 
 function touchStarted() {
@@ -464,15 +579,19 @@ function windowResized() {
 // ─── SPEECH BUBBLE ───────────────────────────────────────────────────────────
 
 function drawSpeechBubble() {
-  const a   = bubbleAlpha;         // 0-255
-  const msg = 'Hey, listen!';
+  const a   = bubbleAlpha;
+  const msg = naviCurrentPhrase;
 
-  // Position bubble above the fairy, nudging right so the tail reads naturally
-  const bx  = fairy.pos.x + 18;   // bubble centre x
-  const by  = fairy.pos.y - 58;   // bubble centre y (above fairy)
-  const bw  = 118;                 // half-width  of rounded rect
-  const bh  = 22;                  // half-height of rounded rect
-  const br  = 14;                  // corner radius
+  // Measure text width so the bubble auto-sizes to any phrase
+  textSize(14);
+  textFont('Georgia, serif');
+  textStyle(BOLD);
+  const tw  = textWidth(msg);
+  const bx  = fairy.pos.x + 18;
+  const by  = fairy.pos.y - 58;
+  const bw  = max(tw / 2 + 20, 70); // half-width with padding, min 70px
+  const bh  = 22;
+  const br  = 14;
 
   // ── Bubble body ──────────────────────────────────────────────────────────
   const [nr, ng, nb] = hslToRgb(CONFIG.naviHue, CONFIG.naviSat, CONFIG.naviLit);
