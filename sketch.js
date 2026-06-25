@@ -446,8 +446,9 @@ const NAVI_PHRASES = [
   'Did you bring me snacks?',
   'Fooey!',
   'Over here!',
-  'Be careful!',
+  'hahaha!',
   'Look at that!',
+  'Follow my light, or lose your way—either choice is fine by me'
 ];
 
 let lastPhraseIndex = -1;
