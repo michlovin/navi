@@ -1,4 +1,4 @@
- * ✨ NAVI — Fairy Particle Effect (Zelda-inspired)
+ ✨ NAVI — Fairy Particle Effect (Zelda-inspired)
 
  click around the page and interact with Navi
 
